@@ -1,0 +1,31 @@
+abundprops:
+    Zsol: .0142
+    logOH12sol: 8.69
+
+gridprops:
+    logZ:
+        n: 12
+        vals: [-2.5, -2., -1.75, -1.5, -1.25, -1., -.75, -.5, -.25, 0., .25, .5]
+        dist: 
+            name: 'Uniform'
+            TeX: '${\rm [Z]}$'
+            params: None
+            initial_val: 0.
+
+    logU:
+        n: 7
+        vals: [-4., -3.5, -3., -2.5, -2., -1.5, -1.]
+        dist:
+            name: 'Uniform'
+            TeX: '$\rm \log U$'
+            params: None
+            initial_val: -2.5
+
+    Age:
+        n: 9
+        vals: [.5, 1., 2., 3., 4., 5., 6., 7., 10.]
+        dist:
+            name: 'Uniform'
+            TeX: 'age [Myr]'
+            params: None
+            initial_val: 5.

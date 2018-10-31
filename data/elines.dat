@@ -1,0 +1,102 @@
+# %ECSV 0.9
+# ---
+# datatype:
+# - {name: name, datatype: U15, description: Emission-line name}
+# - {name: kind, datatype: U10, description: what kind of line (Balmer, Helium, metal)}
+# - {name: lvac, unit: AA, datatype: float64, description: line wavelength in vacuum}
+# - {name: GutkinCharlot-name, datatype: U15, description: name of emission line in GutkinCharlot}
+# - {name: MPL-6-name, datatype: U15, description: name of emission line in MPL-6}
+# - {name: CloudyFSPS-name, datatype: U13, description: name of emission line in CloudyFSPS}
+# - {name: d13-name, datatype: U10, description: name of emission line in Dopita+13}
+# delimiter: ','
+
+ name           , kind        , lvac         , GutkinCharlot-name    , MPL-6-name     , CloudyFSPS-name , d13-name  
+ H-alpha        , X-bright    , 6562.790     , Ha                    , Ha-6564        , H  1 6562.85A   , halpha    
+ H-beta	        , X-bright    , 4861.350     , Hb                    , Hb-4862        , H  1 4861.36A   , hbeta     
+ H-gamma        , X-bright    , 4340.437     , None                  , Hgam-4341      , H  1 4340.49A   , hgamma    
+ H-delta        , X-bright    , 4101.709     , None                  , Hdel-4102      , H  1 4101.76A   , None      
+ H-epsilon      , X-bright    , 3970.075     , None                  , Heps-3791      , H  1 3970.09A   , None      
+ H-8            , X-dim       , 3889.064     , None                  , Hzet-3890      , H  1 3889.07A   , None      
+ H-9            , X-dim       , 3835.397     , None                  , Heta-3836      , H  1 3835.40A   , None      
+ H-10           , X-dim       , 3797.900     , None                  , Hthe-3798      , H  1 3797.92A   , None      
+ H-11           , X-dim       , 3770.633     , None                  , None           , None            , None      
+ H-12           , X-dim       , 3750.151     , None                  , None           , None            , None      
+ H-13           , X-dim       , 3734.369     , None                  , None           , None            , None      
+ H-14           , X-dim       , 3721.946     , None                  , None           , None            , None      
+ H-15           , X-dim       , 3711.978     , None                  , None           , None            , None      
+ H-16           , X-dim       , 3703.859     , None                  , None           , None            , None      
+ H-17           , X-dim       , 3697.157     , None                  , None           , None            , None      
+ H-18           , X-dim       , 3691.551     , None                  , None           , None            , None      
+ H-19           , X-dim       , 3686.931     , None                  , None           , None            , None      
+ H-20           , X-dim       , 3682.823     , None                  , None           , None            , None      
+ H-21           , X-dim       , 3679.370     , None                  , None           , None            , None      
+ H-22           , X-dim       , 3676.376     , None                  , None           , None            , None      
+ H-23           , X-dim       , 3673.810     , None                  , None           , None            , None      
+ H-24           , X-dim       , 3671.320     , None                  , None           , None            , None      
+ H-25           , X-dim       , 3669.450     , None                  , None           , None            , None      
+ H-26           , X-dim       , 3667.730     , None                  , None           , None            , None      
+ H-27           , X-dim       , 3666.080     , None                  , None           , None            , None      
+ H-28           , X-dim       , 3664.650     , None                  , None           , None            , None      
+ H-29           , X-dim       , 3663.410     , None                  , None           , None            , None      
+ H-30           , X-dim       , 3662.220     , None                  , None           , None            , None      
+ HeI-5876       , Y           , 5875.621     , None                  , He-5877        , He 1 5875.61A   , hei5875   
+ HeI-3819       , Y           , 3819.607     , None                  , None           , He 1 3819.60A   , None      
+ HeI-3889       , Y           , 3888.648     , None                  , None           , He 1 3888.63A   , None      
+ HeI-4026       , Y           , 4026.191     , None                  , None           , He 1 4026.19A   , None      
+ HeI-4388       , Y           , 4387.930     , None                  , None           , He 1 4387.93A   , None      
+ HeI_4471       , Y           , 4471.480     , None                  , None           , He 1 4471.47A   , hei4471   
+ HeII_4685      , Y           , 4685.703     , None                  , HeII-4687      , He 2 4686.01A   , None      
+ HeI_4922       , Y           , 4921.931     , None                  , None           , He 1 4921.93A   , None      
+ HeI_5015       , Y           , 5015.678     , None                  , None           , He 1 5015.68A   , hei5016   
+ HeI_5047       , Y           , 5047.738     , None                  , None           , He 1 5047.64A   , None      
+ HeI_6678       , Y           , 6678.151     , None                  , None           , He 1 6678.15A   , hei6678   
+ HeI_7065       , Y           , 7065.190     , None                  , None           , He 1 7065.18A   , None      
+ HeI_7281       , Y           , 7281.349     , None                  , None           , He 1 7281.35A   , None      
+ [OII]-3726     , Z-bright    , 3726.040     , [OII]3727             , OII-3727       , O II 3726.00A   , oii3726   
+ [OII]-3729     , Z-bright    , 3729.800     , None                  , OII-3729       , O II 3729.00A   , oii3729   
+ [NeIII]-3869   , Z-bright    , 3868.760     , None                  , NeIII-3869     , Ne 3 3869.00A   , neiii3869 
+ [OIII]-4959    , Z-bright    , 4958.911     , [OIII]4959            , OIII-4960      , O  3 4959.00A   , oiii4959  
+ [OIII]-5007    , Z-bright    , 5006.843     , [OIII]5007            , OIII-5008      , O  3 5007.00A   , oiii5007  
+ [NII]-6548     , Z-bright    , 6548.050     , [NII]6548             , NII-6549       , N  2 6548.00A   , nii6548   
+ [NII]-6584     , Z-bright    , 6583.450     , [NII]6584             , NII-6585       , N  2 6584.00A   , nii6584   
+ [SII]-6717     , Z-bright    , 6716.440     , [SII]6717             , SII-6718       , S II 6716.00A   , sii6717   
+ [SII]-6731     , Z-bright    , 6730.815     , [SII]6731             , SII-6732       , S II 6731.00A   , sii6731   
+ [NeIII]-3967   , Z-dim       , 3967.470     , None                  , NeIII-3968     , Ne 3 3968.00A   , None      
+ [SII]-4069     , Z-dim       , 4068.600     , None                  , None           , S II 4070.00A   , sii4069   
+ [SII]-4076     , Z-dim       , 4076.350     , None                  , None           , S II 4078.00A   , None      
+ [OIII]-4363    , Z-dim       , 4363.209     , None                  , None           , TOTL 4363.00A   , oiii4363  
+ [ArIV]-4711    , Z-dim       , 4711.370     , None                  , None           , Ar 4 4711.00A   , None      
+ [ArIV]-4740    , Z-dim       , 4740.160     , None                  , None           , Ar 4 4740.00A   , None      
+ [NI]-5197      , Z-dim       , 5197.902     , None                  , None           , N  1 5198.00A   , ni5198    
+ [ClIII]-5518   , Z-dim       , 5517.709     , None                  , None           , Cl 3 5518.00A   , None      
+ [ClIII]-5538   , Z-dim       , 5537.873     , None                  , None           , Cl 3 5538.00A   , None      
+ [NII]-5755     , Z-dim       , 5754.590     , None                  , None           , N  2 5755.00A   , nii5755   
+ [OI]-6300      , Z-dim       , 6300.304     , None                  , OI-6302        , O  1 6300.00A   , oi6300    
+ [SIII]-6312    , Z-dim       , 6312.060     , None                  , None           , S  3 6312.00A   , siii6312  
+ [OI]-6363      , Z-dim       , 6363.776     , None                  , OI-6363        , O  1 6363.00A   , None      
+ [ArIII]-7135   , Z-dim       , 7135.800     , None                  , None           , Ar 3 7135.00A   , ariii7136 
+ [OII]-7319     , Z-dim       , 7321.94      , None                  , None           , O II 7323.00A   , oii7318   
+ [OII]-7330     , Z-dim       , 7332.21      , None                  , None           , O II 7332.00A   , None      
+ [ArIII]-7751   , Z-dim       , 7751.060     , None                  , None           , Ar 3 7751.00A   , ariii7751 
+ [ArIII]-8036   , Z-dim       , 8036.520     , None                  , None           , None            , None      
+ OI-8446        , Z-dim       , 8446.359     , None                  , None           , None            , None      
+ [ClII]-8585    , Z-dim       , 8585.9700    , None                  , None           , None            , None      
+ NI-8683        , Z-dim       , 8683.4000    , None                  , None           , None            , None      
+ [SIII]-8829    , Z-dim       , 8829.400     , None                  , None           , None            , None      
+ [SIII]-9069    , Z-dim       , 9068.600     , None                  , None           , S  3 9069.00A   , siii9068  
+ [SIII]-9531    , Z-dim       , 9530.600     , None                  , None           , S  3 9532.00A   , siii9532  
+ Pa-6           , Paschen     , 10938.086    , None                  , None           , H  1 1.09381m   , None      
+ Pa-7           , Paschen     , 10049.368    , None                  , None           , H  1 1.00494m   , None      
+ Pa-8           , Paschen     , 9545.969     , None                  , None           , H  1 9545.99A   , None      
+ Pa-9           , Paschen     , 9229.014     , None                  , None           , H  1 9229.03A   , None      
+ Pa-10          , Paschen     , 9014.909     , None                  , None           , H  1 9014.92A   , None      
+ Pa-11          , Paschen     , 8862.782     , None                  , None           , None            , None      
+ Pa-12          , Paschen     , 8750.472     , None                  , None           , None            , None      
+ Pa-13          , Paschen     , 8665.019     , None                  , None           , None            , None      
+ Pa-14          , Paschen     , 8598.392     , None                  , None           , None            , None      
+ Pa-15          , Paschen     , 8545.383     , None                  , None           , None            , None      
+ Pa-16          , Paschen     , 8502.483     , None                  , None           , None            , None      
+ Pa-17          , Paschen     , 8467.265     , None                  , None           , None            , None      
+ Pa-18          , Paschen     , 8437.956     , None                  , None           , None            , None      
+ Pa-19          , Paschen     , 8413.318     , None                  , None           , None            , None      
+ Pa-20          , Paschen     , 8392.397     , None                  , None           , None            , None      
