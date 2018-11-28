@@ -8,25 +8,23 @@ import theano
 from astropy import units, constants
 from astropy.cosmology import WMAP9 as cosmo
 from astropy import nddata
+from astropy import units as u, constants as c
 from astropy import table as t
 
 import extinction
 
 from importer import *
+
 import manga_tools as m
+import manga_elines as mel
 import bpt
+import gp_grid
+from pymc3_tricks import *
 
 import pymc3
 
-pi_grid_defaults = {
-    'logOH12': 8.69,
-    'xid': .2,
-    'logU': -2.,
-    'logsfr': -10.,
-    'logdens': 2.
-}
-
-def find_ism_params(grid, dustlaw, line_obs, line_ls, drpall_row):
+def find_ism_params(grid, dustlaw, obs, pca_result, line_ls, drpall_row, Zsol=.0142,
+                    nrad=30, m_at_rad=5, rlim=None):
     '''
     run a pymc3 grid on a whole galaxy
 
@@ -36,167 +34,212 @@ def find_ism_params(grid, dustlaw, line_obs, line_ls, drpall_row):
     - line_ls:
     - drpall_row:
     '''
+    # access results from pca to get priors on tauV*mu and tauV*(1-mu)
+    pca_results_good = ~np.logical_or(pca_result.mask, pca_result.badPDF())
+    tauV_mu_loc, tauV_mu_sd = pca_result.to_normaldist('tau_V mu')
+    tauV_1mmu_loc, tauV_1mmu_sd = pca_result.to_normaldist('tau_V (1 - mu)')
+    logQH_loc, logQH_sd = pca_result.to_normaldist('logQH')
 
+    # good spaxels must be good in both PCA results and emlines measurements
+    goodspax = np.logical_and(obs.spaxels_good_to_run(), pca_results_good)
+    print(goodspax.sum(), 'spaxels')
+    # access emission-line measurements, and pick the good ones
+    f = np.column_stack([obs.line_flux[k][goodspax] for k in obs.lines_used])
+    unc = np.column_stack([obs.line_unc[k].array[goodspax] for k in obs.lines_used])
+
+    # filter PCA measurements of tauV mu and tauV (1 - mu)
+    tauV_mu_loc, tauV_mu_sd = \
+        tauV_mu_loc[goodspax].astype(np.float32), tauV_mu_sd[goodspax].astype(np.float32)
+    tauV_1mmu_loc, tauV_1mmu_sd = \
+        tauV_1mmu_loc[goodspax].astype(np.float32), tauV_1mmu_sd[goodspax].astype(np.float32)
+    logQH_loc, logQH_sd = \
+        logQH_loc[goodspax].astype(np.float32), logQH_sd[goodspax].astype(np.float32)
+
+    # radius in Re units
+    Rreff = obs.hdulist['SPX_ELLCOO'].data[1, ...][goodspax].astype(np.float32)
+
+    #'''
+    if type(rlim) is list:
+        Rtargets = np.linspace(rlim[0], rlim[1], nrad)
+    else:
+        Rtargets = np.linspace(Rreff.min(), Rreff.max(), nrad)
+    meas_ixs = np.unique(
+        np.argsort(np.abs(Rreff[None, :] - Rtargets[:, None]), axis=1)[:, :m_at_rad])
+    print(meas_ixs)
+
+    Rreff, f, unc = Rreff[meas_ixs], f[meas_ixs], unc[meas_ixs]
+    tauV_mu_loc, tauV_mu_sd = tauV_mu_loc[meas_ixs], tauV_mu_sd[meas_ixs]
+    tauV_1mmu_loc, tauV_1mmu_sd = tauV_1mmu_loc[meas_ixs], tauV_1mmu_sd[meas_ixs]
+    logQH_loc, logQH_sd = logQH_loc[meas_ixs], logQH_sd[meas_ixs]
+    #'''
+
+    # distance, for absolute-scaling purposes
     zdist = drpall_row['nsa_zdist']
     four_pi_r2 = (4. * np.pi * cosmo.luminosity_distance(zdist)**2.).to(units.cm**2).value
-
-    # get observations
-    f, unc, _ = line_obs
-    snr_order = np.argsort((f / unc).sum(axis=1))[::-1]
-    f, unc = f[snr_order], unc[snr_order]
-    f, unc = f[:2], unc[:2]
-    print(f / unc)
 
     *obs_shape_, nlines = f.shape
     obs_shape = tuple(obs_shape_)
     print('in galaxy: {} measurements of {} lines'.format(obs_shape, nlines))
 
     with pymc3.Model() as model:
+        #'''
+        # gaussian process on radius determines logZ
+        ls_logZ = pymc3.Gamma('ls-logZ', alpha=3., beta=3., testval=1.) # effectively [0.5, 3] Re
+        gp_eta = pymc3.HalfCauchy('eta', beta=.5, testval=.25)
+        cov_r = gp_eta**2. * pymc3.gp.cov.ExpQuad(input_dim=1, ls=ls_logZ)
+        logZ_gp = pymc3.gp.Latent(cov_func=cov_r)
+
+        # draw from GP
+        logZ_rad = logZ_gp.prior('logZ-r', X=Rreff[:, None])
+        logZ_gp_rad_sigma = pymc3.HalfCauchy('logZ-rad-sigma', beta=.2)
+        logZ = pymc3.Bound(pymc3.Normal, *grid.range('logZ'))(
+            'logZ', mu=logZ_rad, sd=logZ_gp_rad_sigma, shape=obs_shape, testval=-.1)
+        #'''
 
         # priors
         ## first on photoionization model
-        logZ = pymc3.Uniform('logZ', *grid.range('logZ'), shape=obs_shape)
-        logU = pymc3.Uniform('logU', *grid.range('logU'), shape=obs_shape)
-        age = pymc3.Uniform('age', *grid.range('Age'), shape=obs_shape)
+        #logZ = pymc3.Uniform('logZ', *grid.range('logZ'), shape=obs_shape, testval=0.)
+        Z = Zsol * 10.**logZ
+        logU = pymc3.Bound(pymc3.Normal, *grid.range('logU'))(
+            'logU', mu=-2., sd=5., shape=obs_shape, testval=-2.)
+        age = pymc3.Bound(pymc3.Normal, *grid.range('Age'))(
+            'age', mu=5., sd=10., shape=obs_shape, testval=2.5)
+        #xid = theano.shared(0.46)
+
+        # dust laws come from PCA fits
+        tauV_mu_norm = pymc3.Bound(pymc3.Normal, lower=-tauV_mu_loc / tauV_mu_sd)(
+            'tauV mu norm', mu=0, sd=1., shape=obs_shape, testval=0.)
+        tauV_mu = pymc3.Deterministic(
+            'tauV mu', tauV_mu_loc + tauV_mu_sd * tauV_mu_norm)
+        tauV_1mmu_norm = pymc3.Bound(pymc3.Normal, lower=-tauV_1mmu_loc / tauV_1mmu_sd)(
+            'tauV 1mmu norm', mu=0, sd=1., shape=obs_shape, testval=0.)
+        tauV_1mmu = pymc3.Deterministic(
+            'tauV 1mmu', tauV_1mmu_loc + tauV_1mmu_sd * tauV_1mmu_norm)
+
+        #tauV = tauV_mu + tauV_1mmu
+        #logGMSD = pymc3.Deterministic(
+        #    'logGMSD', theano.tensor.log10(0.2 * tauV / (xid * Z)))
 
         grid_params = theano.tensor.stack([logZ, logU, age], axis=0)
 
-        # next on normalization of emission line strengths
-        logQH = pymc3.Normal('logQH', mu=49., sd=3., shape=obs_shape, testval=49.)
-        linelumsperqh = grid.predictt(grid_params)
-        linelums = linelumsperqh * 10**logQH[:, None]
+        # the attenuation power-laws
+        dense_powerlaw = theano.shared((line_ls.quantity.value.astype('float32') / 5500)**-1.3)
+        diffuse_powerlaw = theano.shared((line_ls.quantity.value.astype('float32') / 5500)**-0.7)
 
-        ## next on dust model
-        extinction_at_AV1 = theano.shared(  #  shape (nlines, )
-            dustlaw(wave=line_ls, a_v=1., r_v=3.1))
-        AV = pymc3.Exponential(  #  shape (*obs_shape, )
-            'AV', 3., shape=obs_shape, testval=1.)  #  extinction in V-band
-        twopointfive = theano.shared(2.5)
-        A_lambda = theano.tensor.outer(AV, extinction_at_AV1)
-        atten = 10**(-A_lambda / twopointfive)
+        transmission = pymc3.math.exp(
+            -(theano.tensor.outer(tauV_1mmu, dense_powerlaw) + \
+              theano.tensor.outer(tauV_mu, diffuse_powerlaw)))
 
         # dim lines based on distance
         distmod = theano.shared(four_pi_r2)
-        one_e_minus17 = theano.shared(1.0e-17)
-        linefluxes = pymc3.Deterministic(
-            'linefluxes', linelums * atten / distmod / one_e_minus17)
+        one_e17 = theano.shared(1.0e17)
+        obsnorm = one_e17 / distmod
 
-        #ln_unc_underestimate_factor = pymc3.Uniform(
-        #    'ln-unc-underestimate', -10., 10., testval=0.)
-        linefluxes_obs = pymc3.Normal(
-            'fluxes-obs', mu=linefluxes,
-            sd=unc, # * theano.tensor.exp(ln_unc_underestimate_factor),
-            observed=f)
+        # next on normalization of emission line strengths
+        logQHnorm = pymc3.Normal(
+            'logQHnorm', mu=0., sd=1., testval=0., shape=obs_shape)
+        logQH = pymc3.Deterministic(
+            'logQH', logQH_loc + logQH_sd * logQHnorm)
 
-        trace = pymc3.sample(draws=500, tune=500, cores=1, chains=1)
+        eff_QH = pymc3.Kumaraswamy('effQH', a=3., b=3., shape=obs_shape, testval=0.66)
 
-    return model, trace
+        linelumnorm = theano.tensor.outer(
+            eff_QH * 10**logQH, grid.observable_norms_t.astype('float32'))
 
+        norm = obsnorm * linelumnorm * transmission
 
-class ObservedEmissionLines(object):
+        for i, (name, alpha, cov) in enumerate(zip(grid.observable_names, grid.alphas,
+                                                   grid.covs)):
+            pymc3.StudentT('-'.join(('obsflux', name)), nu=1.,
+                           mu=((gp_grid.gp_predictt(
+                                    cov, alpha, grid.X0, grid_params) + 1.) * norm[:, i]),
+                           sd=unc[:, i], observed=f[:, i])
+
+        model_graph = pymc3.model_to_graphviz()
+        model_graph.format = 'svg'
+        model_graph.render()
+
+        step, start = densemass_sample(
+            model, cores=1, chains=1,
+            nstart=200, nburn=200, ntune=5000)
+
+        try:
+            nchains = 10
+            trace = pymc3.sample(step=step, start=start * nchains,
+                                 draws=500, tune=500, burn=500,
+                                 cores=1, chains=nchains,
+                                 nuts_kwargs=dict(target_accept=.95),
+                                 init='adapt_diag')
+        except Exception as e:
+            print(e)
+            trace = None
+
+    return model, trace, f, unc, Rreff
+
+elinekind_to_snrth = {'X-bright': 6., 'X-dim': 4., 'Y': 3., 'Z-bright': 5., 'Z-dim': 2.}
+
+class Elines(mel.MaNGAElines):
     '''
-    container that holds emission-line observations
+    container that holds and retrieves emission-line observations
     '''
-    def __init__(self, names, flux, flux_unc, channelmasks, allmasks, snr, elines_table,
-                 **kwargs):
-        self.names = names
-        self.flux = flux
-        self.flux_unc = flux_unc
-        self.cov = np.stack([np.diag(unc**2.) for unc in flux_unc])
-        self.channelmasks = channelmasks
-        self.allmasks = allmasks
-        self.snr = snr
 
-        self.shape = (len(self.flux), ) + self.flux[0].shape
+    def __init__(self, hdulist, elines_table, data_colname, lines_used, *args, **kwargs):
+        super().__init__(hdulist)
 
-        self.snr_threshs = np.array([3., 3., 3., 2., 1., 2., 1., 1., 1.])
+        self.elines_table = elines_table
+        self.data_colname = data_colname
+        self.lines_used = lines_used
 
-        self.props = kwargs
+        self.fulldata = {k: self.get_qty(
+                                qty='GFLUX',
+                                key=self.elines_table.loc[k][data_colname],
+                                sn_th=elinekind_to_snrth[self.elines_table.loc[k]['kind']],
+                                maskbits=kwargs.get('maskbits', [30]))
+                         for k in self.lines_used}
 
-    def goodgalaxy(self, goodfrac_th=.6):
-        nspax = (self.snr > 0.).sum()
+        self.line_flux = {k: self.fulldata[k].data
+                          for k in self.lines_used}
 
-        ngood = np.all(np.stack(
-                (self.snr > 0., ) + tuple(~m for m in self.allmasks.values())),
-            axis=0).sum()
+        self.line_unc = {k: self.fulldata[k].uncertainty
+                         for k in self.lines_used}
 
-        return (ngood / nspax) > goodfrac_th
+        self.line_mask = {k: self.fulldata[k].mask
+                          for k in self.lines_used}
+
+        self.line_unit = {k: self.fulldata[k].unit
+                          for k in self.lines_used}
+
+    def is_dig_dom(self, Ha_EW_t=5. * u.AA):
+        Ha_EW = self.get_qty(qty='SEW', key='Ha-6564', sn_th=0., maskbits=[])
+        Ha_EW_q = Ha_EW.data * u.Unit(Ha_EW.unit)
+        return Ha_EW_q < Ha_EW_t
 
     @property
-    def spax_good(self):
-        good = np.all(np.stack(
-                (self.snr > 0., ) + tuple(~m for m in self.allmasks.values())),
-            axis=0)
-
-        return good
-
-    def get_good_obs(self):
-        f = np.column_stack([ch[self.spax_good] for ch in self.flux])
-        unc = np.column_stack([ch[self.spax_good] for ch in self.flux_unc])
-        mask = ~np.column_stack([ch[self.spax_good] for ch in self.channelmasks])
-        line_snr = (f / unc) * mask
-
-        lines_good = np.all(line_snr > self.snr_threshs, axis=1)
-
-        f, unc, mask = f[lines_good], unc[lines_good], mask[lines_good]
-
-        return f, unc, mask
-
-    @classmethod
-    def from_DAP_MAPS(cls, plate, ifu, kind, mpl_v, elines_table, lines_used,
-                      maskbits=[30], Ha_EW_t=10.):
-        # load DAP data
-        dap = m.load_dap_maps(plate, ifu, kind=kind, mpl_v=mpl_v)
-        dap_fluxes = dap['EMLINE_GFLUX']
-        dap_fluxes_ivar = dap[dap_fluxes.header['ERRDATA']]
-        dap_fluxes_mask = dap[dap_fluxes.header['QUALDATA']]
-        # figure out in which channel each emission line name lives
-        key2channel = m.make_key2channel(
-            dap_fluxes, axis=0, start=1, channel_key_start='C')
-
-        # load table that helps us translate
-        elines_table = elines_table.copy(copy_data=True)
-        elines_table.add_index('name')
-        mpl_v_colname = '{}-name'.format(mpl_v)
-
-        # retriever object
-        retriever = ChannelByNameRetriever(elines_table, key2channel, mpl_v_colname)
-
-        # get flux, flux stdev, and flux mask for all lines
-        flux = [retriever(dap_fluxes, name) for name in lines_used]
-        flux_std = [1. / np.sqrt(retriever(dap_fluxes_ivar, name)) for name in lines_used]
-        flux_mask = [m.mask_from_maskbits(
-                         retriever(dap_fluxes_mask, name), maskbits) for name in lines_used]
-
-        # mask based on Ha EW
-        is_dig = retriever(dap['EMLINE_SEW'], 'H-alpha') < Ha_EW_t
+    def not_sf_dom(self):
 
         # mask based on Kauffmann+03 (NII/Ha) / (OIII/Hb)
-        not_sf_dom = bpt.KaKe.Ka03_NII().classify(
-            forbidden=retriever(dap_fluxes, '[NII]-6584'),
-            Ha=retriever(dap_fluxes, 'H-alpha'),
-            Oiii=retriever(dap_fluxes, '[OIII]-5007'),
-            Hb=retriever(dap_fluxes, 'H-beta'))
+        not_sf_dom_Ka03 = bpt.KaKe.Ka03_NII().classify(
+            forbidden=self.line_flux['[NII]-6584'],
+            Ha=self.line_flux['H-alpha'],
+            Oiii=self.line_flux['[OIII]-5007'],
+            Hb=self.line_flux['H-beta'])
 
-        snr = dap['BIN_SNR'].data
+        not_sf_dom_oi = bpt.KaKe.OI().classify(
+            forbidden=self.line_flux['[OI]-6300'],
+            Ha=self.line_flux['H-alpha'],
+            Oiii=self.line_flux['[OIII]-5007'],
+            Hb=self.line_flux['H-beta'])
 
-        dap.close()
+        not_sf_dom = np.logical_or.reduce((not_sf_dom_Ka03, not_sf_dom_oi))
 
-        return cls(names=lines_used, flux=flux, flux_unc=flux_std, channelmasks=flux_mask,
-                   allmasks={'is_dig': is_dig, 'not_sf_dom': not_sf_dom}, snr=snr,
-                   elines_table=elines_table)
+        return not_sf_dom
 
-    @classmethod
-    def from_Pipe3D(cls, plate, ifu, mpl_v, names):
-        raise NotImplementedError
+    def grid_is_valid(self, Ha_EW_t=5. * u.AA):
+        return ~np.logical_or(self.is_dig_dom(Ha_EW_t), self.not_sf_dom)
 
-class ChannelByNameRetriever(object):
-    def __init__(self, elines_table, key2channel, data_colname):
-        self.elines_table = elines_table
-        self.key2channel = key2channel
-        self.data_colname = data_colname
+    @property
+    def all_lines_good(self):
+        return ~np.logical_or.reduce(tuple(m for m in self.line_mask.values()))
 
-    def __call__(self, hdu, common_linename):
-        data_linename = self.elines_table.loc[common_linename][self.data_colname]
-        return hdu.data[self.key2channel[data_linename], ...]
-
+    def spaxels_good_to_run(self, Ha_EW_t=5. * u.AA):
+        return self.grid_is_valid(Ha_EW_t) * self.all_lines_good
